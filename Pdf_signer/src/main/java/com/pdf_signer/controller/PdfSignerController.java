@@ -2,6 +2,7 @@ package com.pdf_signer.controller;
 
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
+import java.security.SignatureException;
 
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,8 +26,8 @@ public class PdfSignerController {
 		this.pdfSignerService = pdfSignerService;
 	}
 	
-	@GetMapping()
-	public void pdfSigner() throws DocumentException, NoSuchAlgorithmException, IOException {
-		this.pdfSignerService.pdfSigner();
+	@GetMapping(value = "")
+	public boolean pdfSigner() throws DocumentException, NoSuchAlgorithmException, IOException, SignatureException {
+		return this.pdfSignerService.pdfSigner();
 	}
 }

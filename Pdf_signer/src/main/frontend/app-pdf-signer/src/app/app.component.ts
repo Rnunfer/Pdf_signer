@@ -7,10 +7,14 @@ import { PdfSignerService } from './pdf-signer.service';
   styleUrls: ['./app.component.css']
 })
 export class AppComponent {
-  
+
+  cambio: boolean= false;
+
   constructor( private service : PdfSignerService) {}
 
   signPdf() {
-    this.service.pdfSign();
+    this.service.pdfSign().subscribe(
+      (data) => {this.cambio = data}
+    )
   }
 }

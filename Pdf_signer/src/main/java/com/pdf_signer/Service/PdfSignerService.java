@@ -4,8 +4,11 @@ package com.pdf_signer.Service;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SignatureException;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Map;
@@ -25,64 +28,65 @@ import com.lowagie.text.pdf.PdfSignatureAppearance;
 import com.lowagie.text.pdf.PdfStamper;
 import com.lowagie.text.pdf.PdfString;
 
+import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.List;
+
+import com.lowagie.text.pdf.AcroFields;
+import com.lowagie.text.pdf.PdfPKCS7;
+import com.lowagie.text.pdf.PdfReader;
+
 @Service
 public class PdfSignerService {
 
 	public PdfSignerService() {}
 	
-	public void pdfSigner() throws DocumentException, IOException, NoSuchAlgorithmException {
+	public boolean pdfSigner() throws DocumentException, IOException, NoSuchAlgorithmException, SignatureException {
 		
-		System.out.println("Activación");
+		String pdf = "src/main/resources/pdf_digital_signature_timestamp.pdf";
 		
-		byte[] expectedDigestPreClose = null;
-        byte[] expectedDigestClose = null;
+		 List<X509Certificate> certificates = new ArrayList<>();
+	        System.out.println("pdf name: " + pdf);
 
-        Calendar signDate = Calendar.getInstance();
-        PdfObject overrideFileId = new PdfLiteral("<123><123>".getBytes());
+	        KeyStore kall = PdfPKCS7.loadCacertsKeyStore();
 
-        for (int i = 0; i < 10; i++) {
-            try (InputStream is = getClass().getResourceAsStream("/EmptyPage.pdf"); ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-                PdfReader reader = new PdfReader(is);
-                PdfStamper stp = PdfStamper.createSignature(reader, baos, '\0', null, true);
-                stp.setEnforcedModificationDate(signDate);
-                stp.setOverrideFileId(overrideFileId);
+	        try (PdfReader reader = new PdfReader(pdf)) {
+	            AcroFields fields = reader.getAcroFields();
 
-                PdfSignatureAppearance sap = stp.getSignatureAppearance();
+	            List<String> signatures = fields.getSignedFieldNames();
+	            System.out.println("Signs: " + signatures.size());
+	            for (String signature : signatures) {
 
-                PdfDictionary dic = new PdfDictionary();
-                dic.put(PdfName.FILTER, PdfName.ADOBE_PPKLITE);
-                dic.put(PdfName.M, new PdfDate(signDate));
+	                System.out.println("Signature name: " + signature);
+	                System.out.println("Signature covers whole document: " + fields.signatureCoversWholeDocument(signature));
+	                System.out.println(
+	                        "Document revision: " + fields.getRevision(signature) + " of " + fields.getTotalRevisions());
 
-                sap.setCryptoDictionary(dic);
-                sap.setSignDate(signDate);
-                sap.setVisibleSignature(new Rectangle(100, 100), 1);
-                sap.setLayer2Text("Hello world");
+	                PdfPKCS7 pk = fields.verifySignature(signature);
+	                Calendar cal = pk.getSignDate();
+	                Certificate[] pkc = pk.getCertificates();
+	                X509Certificate certificate = pk.getSigningCertificate();
+	                certificates.add(certificate);
+	                System.out.println("sign date:" + cal.getTime());
+	                System.out.println("Subject: " + PdfPKCS7.getSubjectFields(certificate));
+	                System.out.println("Document modified: " + !pk.verify());
+	                System.out.println("Timestamp valid: " + pk.verifyTimestampImprint());
 
-                Map<PdfName, Integer> exc = new HashMap<>();
-                exc.put(PdfName.CONTENTS, 10);
-                sap.preClose(exc);
+	                Object[] fails = PdfPKCS7.verifyCertificates(pkc, kall, null, cal);
+	                if (fails == null) {
+	                    System.out.println("Certificates verified against the KeyStore");
+	                } else {
+	                    System.out.println("Certificate failed: " + fails[1]);
+	                }
 
-                byte[] result = Utilities.toByteArray(sap.getRangeStream());
-                byte[] sha256 = getSHA256(result);
-                if (expectedDigestPreClose == null) {
-                    expectedDigestPreClose = sha256;
-                } else {
-                    //assertArrayEquals(expectedDigestPreClose, sha256);
-                }
+	            }
+	        }
 
-                PdfDictionary update = new PdfDictionary();
-                update.put(PdfName.CONTENTS, new PdfString("aaaa").setHexWriting(true));
-                sap.close(update);
-
-                byte[] resultClose = Utilities.toByteArray(sap.getRangeStream());
-                byte[] sha256Close = getSHA256(resultClose);
-                if (expectedDigestClose == null) {
-                    expectedDigestClose = sha256Close;
-                } else {
-                    //assertArrayEquals(expectedDigestClose, sha256Close);
-                }
-            }
-        }
+        
+        return true;
     }
     
     private byte[] getSHA256(byte[] bytes) throws NoSuchAlgorithmException {
